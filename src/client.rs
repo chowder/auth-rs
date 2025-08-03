@@ -48,22 +48,25 @@ struct SessionStore;
 
 impl SessionStore {
     const SERVICE: &'static str = "auth-rs";
-    const USER: &'static str = "session";
     
-    fn get_entry() -> Result<Entry> {
-        Entry::new(Self::SERVICE, Self::USER)
+    fn get_entry(session_name: &Option<String>) -> Result<Entry> {
+        let key = match session_name {
+            Some(session_name) => format!("named-session-{session_name}"),
+            None => "session".to_owned(),
+        };
+        Entry::new(Self::SERVICE, &key)
             .map_err(AuthError::from)
     }
     
-    fn store(session: &Session) -> Result<()> {
-        let entry = Self::get_entry()?;
+    fn store(session_name: &Option<String>, session: &Session) -> Result<()> {
+        let entry = Self::get_entry(session_name)?;
         let session_json = serde_json::to_string(session)?;
         entry.set_password(&session_json)
             .map_err(AuthError::from)
     }
     
-    fn load() -> Result<Option<Session>> {
-        let entry = Self::get_entry()?;
+    fn load(session_name: &Option<String>) -> Result<Option<Session>> {
+        let entry = Self::get_entry(session_name)?;
         match entry.get_password() {
             Ok(session_json) => {
                 let session: Session = serde_json::from_str(&session_json)?;
@@ -74,8 +77,8 @@ impl SessionStore {
         }
     }
     
-    fn clear() -> Result<()> {
-        let entry = Self::get_entry()?;
+    fn clear(session_name: &Option<String>) -> Result<()> {
+        let entry = Self::get_entry(session_name)?;
         match entry.delete_credential() {
             Ok(()) => Ok(()),
             Err(keyring::Error::NoEntry) => Ok(()),
@@ -85,18 +88,15 @@ impl SessionStore {
 }
 
 pub struct Client {
+    session_name: Option<String>,
     client: reqwest::Client,
 }
 
-impl Default for Client {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 impl Client {
-    pub fn new() -> Self {
+    pub fn new(session_name: Option<String>) -> Self {
         Self {
+            session_name,
             client: reqwest::Client::new(),
         }
     }
@@ -131,12 +131,12 @@ impl Client {
             .send()
             .await?;
         let session: Session = response.json().await?;
-        SessionStore::store(&session)?;
+        SessionStore::store(&self.session_name, &session)?;
         Ok(session)
     }
 
     pub fn session(&self) -> Result<Session> {
-        SessionStore::load()?.ok_or(AuthError::SessionNotFound)
+        SessionStore::load(&self.session_name)?.ok_or(AuthError::SessionNotFound)
     }
     
     pub async fn accounts(&self) -> Result<Vec<Account>> {
@@ -153,6 +153,6 @@ impl Client {
     }
 
     pub fn logout(&self) -> Result<()> {
-        SessionStore::clear()
+        SessionStore::clear(&self.session_name)
     }
 }

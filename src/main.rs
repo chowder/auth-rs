@@ -18,14 +18,22 @@ struct CommandLineArgs {
 #[derive(Subcommand, Debug)]
 enum AppCommand {
     /// Start the authentication flow to authorize with your Jagex account
-    Authorize,
+    Authorize {
+        #[arg(short, long)]
+        session_name: Option<String>,
+    },
 
     /// List all characters associated with the authorized Jagex account
     #[command(name = "ls")]
-    ListCharacters,
+    ListCharacters {
+        #[arg(short, long)]
+        session_name: Option<String>,
+    },
 
     /// Execute a program with Jagex session credentials (e.g., RuneLite, OSRS client)
     Exec {
+        #[arg(short, long)]
+        session_name: Option<String>,
         /// Character ID to use for authentication
         #[arg(short, long, help = "Character ID from 'ls' command")]
         character_id: String,
@@ -37,7 +45,10 @@ enum AppCommand {
     },
 
     /// Clear all stored authentication tokens and sessions
-    Logout,
+    Logout {
+        #[arg(short, long)]
+        session_name: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -47,9 +58,9 @@ async fn main() -> miette::Result<()> {
     let cli = CommandLineArgs::parse();
 
     match cli.command {
-        AppCommand::Authorize => browser::authorize(),
-        AppCommand::ListCharacters => {
-            let client = Client::new();
+        AppCommand::Authorize { session_name } => browser::authorize(session_name),
+        AppCommand::ListCharacters { session_name } => {
+            let client = Client::new(session_name);
             let accounts = client.accounts().await?;
             for account in accounts {
                 println!(
@@ -62,11 +73,12 @@ async fn main() -> miette::Result<()> {
             Ok(())
         }
         AppCommand::Exec {
+            session_name,
             character_id,
             exec,
             args,
         } => {
-            let client = Client::new();
+            let client = Client::new(session_name);
             let session = client.session()?;
             let accounts = client.accounts().await?;
 
@@ -95,8 +107,8 @@ async fn main() -> miette::Result<()> {
                 })
             }
         }
-        AppCommand::Logout => {
-            let client = Client::new();
+        AppCommand::Logout { session_name } => {
+            let client = Client::new(session_name);
             client.logout()
         }
     }.map_err(|error| {

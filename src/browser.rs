@@ -11,6 +11,7 @@ use wry::{Rect, WebViewBuilder};
 use crate::{client::Client, error::{AuthError, Result}};
 
 async fn handle_auth_redirect(
+    client: &Client,
     code: String,
     state: String, 
     options: AuthOptions,
@@ -20,7 +21,6 @@ async fn handle_auth_redirect(
         return Err(AuthError::InvalidResponse("Auth state parameter mismatch - possible CSRF attack".to_string()));
     }
     
-    let client = Client::new();
     let token_response = client.token(&code, &options.verifier).await?;
     let (consent_url, new_consent_state) = create_consent_url(&token_response.tokens.id_token)?;
     
@@ -32,6 +32,7 @@ async fn handle_auth_redirect(
 }
 
 async fn handle_consent_redirect(
+    client: &Client,
     id_token: String,
     state: String,
     consent_state: Arc<Mutex<Option<String>>>,
@@ -39,7 +40,6 @@ async fn handle_consent_redirect(
     let expected_state = consent_state.lock().ok().and_then(|guard| guard.clone());
     match expected_state {
         Some(expected) if expected == state => {
-            let client = Client::new();
             client.create_session(&id_token).await?;
             Ok(CustomEvent::Close)
         }
@@ -192,6 +192,7 @@ fn create_consent_url(id_token: &str) -> Result<(String, String)> {
 
 
 fn spawn_message_handler(
+    client: Client,
     rx: std::sync::mpsc::Receiver<Message>,
     consent_state: Arc<Mutex<Option<String>>>,
     proxy: tao::event_loop::EventLoopProxy<CustomEvent>,
@@ -200,10 +201,10 @@ fn spawn_message_handler(
         while let Ok(message) = rx.recv() {
             let result = match message {
                 Message::AuthRedirect { code, state, options } => {
-                    handle_auth_redirect(code, state, options, consent_state.clone()).await
+                    handle_auth_redirect(&client, code, state, options, consent_state.clone()).await
                 }
                 Message::ConsentRedirect { id_token, state } => {
-                    handle_consent_redirect(id_token, state, consent_state.clone()).await
+                    handle_consent_redirect(&client, id_token, state, consent_state.clone()).await
                 }
             };
 
@@ -227,7 +228,7 @@ fn spawn_message_handler(
     });
 }
 
-pub fn authorize() -> Result<()> {
+pub fn authorize(session_name: Option<String>) -> Result<()> {
     let (tx, rx) = channel::<Message>();
     let consent_state: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
@@ -241,7 +242,8 @@ pub fn authorize() -> Result<()> {
         .build(&event_loop)
         .map_err(|e| AuthError::InvalidResponse(format!("Failed to create window: {e}")))?;
 
-    spawn_message_handler(rx, consent_state, proxy.clone());
+    let client = Client::new(session_name);
+    spawn_message_handler(client, rx, consent_state, proxy.clone());
 
     let (auth_url, options) = create_auth_url()?;
     let builder = WebViewBuilder::new()
