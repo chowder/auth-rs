@@ -49,7 +49,7 @@ Save this as `~/.local/share/applications/runelite-jagex.desktop` and replace `Y
 * If you already have a desktop entry for RuneLite (or any other client), you should be able to add this as a non-steam game
 * If you do not have a desktop entry, add any application or locate the "auth-rs" binary on your system, then change properties after:
   * target: `"auth-rs"`
-  * launch options: "exec" "--character-id" "123456789" "java" "--" "-jar" "/path/to/RuneLite.jar"
+  * launch options: `"exec" "--character-id" "123456789" "java" "--" "-jar" "/path/to/RuneLite.jar"`
 
 ### Using alternative clients
 
