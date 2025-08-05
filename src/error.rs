@@ -82,6 +82,13 @@ pub enum AuthError {
         help("Please try again or report this bug if it persists")
     )]
     CredentialStoreError(String),
+
+    #[error("No cache directory unavailable")]
+    #[diagnostic(
+        code(auth_rs::no_cache_dir),
+        help("Please try again or report this bug if it persists")
+    )]
+    NoCacheDir,
 }
 
 

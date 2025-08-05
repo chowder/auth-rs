@@ -28,12 +28,21 @@ enum AppCommand {
     ListCharacters {
         #[arg(short, long)]
         session_name: Option<String>,
+        /// Use offline cache to fetch characters
+        #[arg(short, long)]
+        offline: bool,
+        /// Stores list of characters for offline use
+        #[arg(short, long)]
+        write_cache: bool,
     },
 
     /// Execute a program with Jagex session credentials (e.g., RuneLite, OSRS client)
     Exec {
         #[arg(short, long)]
         session_name: Option<String>,
+        /// Use offline cache to fetch characters
+        #[arg(short, long)]
+        offline: bool,
         /// Character ID to use for authentication
         #[arg(short, long, help = "Character ID from 'ls' command")]
         character_id: String,
@@ -59,9 +68,13 @@ async fn main() -> miette::Result<()> {
 
     match cli.command {
         AppCommand::Authorize { session_name } => browser::authorize(session_name),
-        AppCommand::ListCharacters { session_name } => {
+        AppCommand::ListCharacters { 
+            session_name, 
+            offline,
+            write_cache 
+        } => {
             let client = Client::new(session_name);
-            let accounts = client.accounts().await?;
+            let accounts = client.accounts(offline, write_cache).await?;
             for account in accounts {
                 println!(
                     "  {} {} (ID: {})",
@@ -74,13 +87,14 @@ async fn main() -> miette::Result<()> {
         }
         AppCommand::Exec {
             session_name,
+            offline,
             character_id,
             exec,
             args,
         } => {
             let client = Client::new(session_name);
             let session = client.session()?;
-            let accounts = client.accounts().await?;
+            let accounts = client.accounts(offline, false).await?;
 
             if let Some(account) = accounts.iter().find(|a| a.account_id == character_id) {
                 std::env::set_var("JX_SESSION_ID", session.session_id);

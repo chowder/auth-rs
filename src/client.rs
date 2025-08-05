@@ -1,6 +1,6 @@
 
 
-use std::time::SystemTime;
+use std::{path::PathBuf, time::SystemTime};
 
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
@@ -132,6 +132,7 @@ impl Client {
             .await?;
         let session: Session = response.json().await?;
         SessionStore::store(&self.session_name, &session)?;
+        self.clear_accounts_cache()?;
         Ok(session)
     }
 
@@ -139,8 +140,66 @@ impl Client {
         SessionStore::load(&self.session_name)?.ok_or(AuthError::SessionNotFound)
     }
     
-    pub async fn accounts(&self) -> Result<Vec<Account>> {
+    fn clear_accounts_cache(&self) -> Result<()> {
+        let path = match self.accounts_cache_dir() {
+            Ok(path) => path,
+            Err(AuthError::NoCacheDir) => return Ok(()),
+            Err(e) => return Err(e),
+        };
+
+        if path.exists() {
+            return Ok(std::fs::remove_dir_all(path)?);
+        }
+
+        Ok(())
+    }
+
+    fn accounts_cache_dir(&self) -> Result<PathBuf> {
+        let mut path = dirs::cache_dir().ok_or(AuthError::NoCacheDir)?;
+        let key = match &self.session_name {
+            Some(session_name) => format!("named-session-{session_name}"),
+            None => "session".to_owned(),
+        };
+        path = path.join("auth-rs");
+        path = path.join(key);
+        Ok(path)
+    }
+
+    fn accounts_cache(&self) -> Result<Vec<Account>> {
+        let path = self.accounts_cache_dir()?;
+        let path = path.join("accounts.json");
+
+        if !path.exists() {
+            return Ok(vec![]);
+        }
+
+        let file = std::fs::File::open(path)?;
+        let accounts: Vec<Account> = serde_json::from_reader(file)?;
+        Ok(accounts)
+    }
+
+    fn store_accounts(&self, accounts: &Vec<Account>) -> Result<()> {
+        let path = self.accounts_cache_dir()?;
+
+        if !path.exists() {
+            std::fs::create_dir_all(&path)?;
+        }
+
+        let path = path.join("accounts.json");
+        let file = std::fs::File::create(path)?;
+
+        serde_json::to_writer(file, accounts)?;
+
+        Ok(())
+    }
+
+    pub async fn accounts(&self, offline: bool, store_offline: bool) -> Result<Vec<Account>> {
         let session = self.session()?;
+
+        if offline {
+            return self.accounts_cache();
+        }
+
         let url = "https://auth.jagex.com/game-session/v1/accounts";
         let response = self.client.get(url)
             .header("Content-Type", "application/json")
@@ -149,10 +208,18 @@ impl Client {
             .send()
             .await?;
         let accounts: Vec<Account> = response.json().await?;
+
+        if store_offline {
+            self.store_accounts(&accounts)?;
+        }
+
         Ok(accounts)
     }
 
     pub fn logout(&self) -> Result<()> {
-        SessionStore::clear(&self.session_name)
+        SessionStore::clear(&self.session_name)?;
+        self.clear_accounts_cache()?;
+
+        Ok(())
     }
 }
