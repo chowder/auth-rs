@@ -30,7 +30,11 @@ fn build_exec_command(
     exec_cmd.push("--character-id".to_string());
     exec_cmd.push(character_id.to_string());
     exec_cmd.push(exec.to_string());
-    exec_cmd.extend(args.iter().cloned());
+    
+    if !args.is_empty() {
+        exec_cmd.push("--".to_string());
+        exec_cmd.extend(args.iter().cloned());
+    }
     
     exec_cmd.join(" ")
 }
