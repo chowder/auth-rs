@@ -30,18 +30,13 @@ auth-rs exec --character-id 123456789 java -- -jar RuneLite.jar
 
 ## Desktop Integration
 
-```ini
-[Desktop Entry]
-Name=RuneLite <insert character name>
-Comment=Launch RuneLite
-Exec=auth-rs exec --character-id YOUR_CHARACTER_ID java -- -jar /path/to/RuneLite.jar
-Icon=runelite
-Terminal=false
-Type=Application
-Categories=Game;
+The easiest way to create a desktop entry is using the built-in command:
+
+```bash
+auth-rs create-desktop-entry --name "RuneLite (auth-rs)" --character-id 123456789 java -- -jar /path/to/RuneLite.jar
 ```
 
-Save this as `~/.local/share/applications/runelite-jagex.desktop` and replace `YOUR_CHARACTER_ID` with your actual character ID.
+This creates a shortcut called "RuneLite (auth-rs)" that you can launch from your applications menu or by searching for it.
 
 ## SteamDeck / Steam
 
